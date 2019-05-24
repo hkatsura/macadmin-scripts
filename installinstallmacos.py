@@ -299,6 +299,20 @@ def get_server_metadata(catalog, product_key, workdir, ignore_cache=False):
         return None
 
 
+def sortable_build_string(build):
+    '''Returns a sortable string for the given build OS version'''
+    import re
+    # parse "18F203" or seed "18F131a"
+    r = re.search('(\d+)([A-Z])(\d+)([a-z])?', build)
+    s = '0';
+    if r:
+        # and produce "1804020300" or seed "1804013101"
+        (s1, s2, s3, s4) = r.group(1, 2, 3, 4)
+        n4 = ord(s4) - ord('a') + 1 if s4 else 0
+        s = '%d%02d%04d%02d' % (int(s1), ord(s2) - ord('A'), int(s3), n4)
+    return s
+
+
 def parse_dist(filename):
     '''Parses a softwareupdate dist file, returning a dict of info of
     interest'''
@@ -350,6 +364,8 @@ def parse_dist(filename):
     # assume machine specific if the number of supported boards is less than 10
     nob = len(boards)
     dist_info['boards'] = ', '.join(boards) if nob < 10 else 'all (%d)' % (nob)
+    # add sortable build version string
+    dist_info['sortable'] = sortable_build_string(dist_info['BUILD'])
     return dist_info
 
 
@@ -418,6 +434,7 @@ def os_installer_product_info(catalog, workdir, ignore_cache=False):
                   file=sys.stderr)
         dist_info = parse_dist(dist_path)
         product_info[product_key]['DistributionPath'] = dist_path
+        product_info[product_key]['product_id'] = product_key
         product_info[product_key].update(dist_info)
 
     return product_info
@@ -521,7 +538,10 @@ def main():
     # display a menu of choices (some seed catalogs have multiple installers)
     print('%2s %12s %10s %8s %11s  %-18s %s'
           % ('#', 'ProductID', 'Version', 'Build', 'Post Date', 'Title', 'Boards'))
-    for index, product_id in enumerate(product_info):
+    from operator import itemgetter
+    pis = sorted(product_info.values(), key=itemgetter('sortable'), reverse=True)
+    product_ids = [d['product_id'] for d in pis]
+    for index, product_id in enumerate(product_ids):
         print('%2s %12s %10s %8s %11s  %-18s %s' % (
             index + 1,
             product_id,
@@ -538,7 +558,7 @@ def main():
         index = int(answer) - 1
         if index < 0:
             raise ValueError
-        product_id = list(product_info.keys())[index]
+        product_id = product_ids[index]
     except (ValueError, IndexError):
         print('Exiting.')
         exit(0)
