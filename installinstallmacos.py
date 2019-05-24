@@ -203,9 +203,17 @@ def unmountdmg(mountpoint):
             print('Failed to unmount %s' % mountpoint, file=sys.stderr)
 
 
+def allow_any_board_dist(dist_path):
+    '''replace "if (boardIds.indexOf(boardId) == -1)" with "if (false)"'''
+    import fileinput
+    for line in fileinput.FileInput(dist_path, inplace=1):
+        print(line.replace('if (boardIds.indexOf(boardId) == -1)', 'if (false)').rstrip('\n'))
+
+
 def install_product(dist_path, target_vol):
     '''Install a product to a target volume.
     Returns a boolean to indicate success or failure.'''
+    allow_any_board_dist(dist_path)
     cmd = ['/usr/sbin/installer', '-pkg', dist_path, '-target', target_vol]
     try:
         subprocess.check_call(cmd)
