@@ -217,6 +217,12 @@ def install_product(dist_path, target_vol):
     cmd = ['/usr/sbin/installer', '-pkg', dist_path, '-target', target_vol]
     try:
         subprocess.check_call(cmd)
+        # dmg.T9ak1HApplications
+        path = target_vol + 'Applications'
+        if os.path.exists(path):
+            print('executing the ${TARGET}Applications workaround...')
+            subprocess.check_call(['/usr/bin/ditto', path, os.path.join(target_vol, 'Applications')])
+            subprocess.check_call(['/bin/rm', '-r', path])
         return True
     except subprocess.CalledProcessError as err:
         print(err, file=sys.stderr)
