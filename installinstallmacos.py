@@ -151,6 +151,7 @@ def make_compressed_dmg(app_path, diskimagepath):
     print('Making read-only compressed disk image containing %s...'
           % os.path.basename(app_path))
     cmd = ['/usr/bin/hdiutil', 'create', '-fs', 'HFS+',
+           '-layout', 'NONE',
            '-srcfolder', app_path, diskimagepath]
     try:
         subprocess.check_call(cmd)
