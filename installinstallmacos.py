@@ -546,13 +546,14 @@ def main():
         exit(-1)
 
     # display a menu of choices (some seed catalogs have multiple installers)
-    print('%2s %12s %10s %8s %11s  %-18s %s'
+    print_fmt = '%2s %12s %10s %8s %11s  %-19s %s'
+    print(print_fmt
           % ('#', 'ProductID', 'Version', 'Build', 'Post Date', 'Title', 'Boards'))
     from operator import itemgetter
     pis = sorted(product_info.values(), key=itemgetter('sortable'), reverse=True)
     product_ids = [d['product_id'] for d in pis]
     for index, product_id in enumerate(product_ids):
-        print('%2s %12s %10s %8s %11s  %-18s %s' % (
+        print(print_fmt % (
             index + 1,
             product_id,
             product_info[product_id]['version'],
