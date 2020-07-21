@@ -54,8 +54,10 @@ DEFAULT_SUCATALOGS = {
     '19': 'https://swscan.apple.com/content/catalogs/others/'
           'index-10.15-10.14-10.13-10.12-10.11-10.10-10.9'
           '-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog',
+    '20': 'https://swscan.apple.com/content/catalogs/others/'
+          'index-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9'
+          '-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog',
 }
-
 
 SEED_CATALOGS_PLIST = (
     '/System/Library/PrivateFrameworks/Seeding.framework/Versions/Current/'
@@ -72,7 +74,7 @@ def get_input(prompt=None):
         return input(prompt)
 
 
-def readPlist(filepath):
+def read_plist(filepath):
     '''Wrapper for the differences between Python 2 and Python 3's plistlib'''
     try:
         with open(filepath, "rb") as fileobj:
@@ -82,10 +84,10 @@ def readPlist(filepath):
         return plistlib.readPlist(filepath)
 
 
-def readPlistFromString(bytestring):
+def read_plist_from_string(bytestring):
     '''Wrapper for the differences between Python 2 and Python 3's plistlib'''
     try:
-       return plistlib.loads(bytestring)
+        return plistlib.loads(bytestring)
     except AttributeError:
         # plistlib module doesn't have a load function (as in Python 2)
         return plistlib.readPlistFromString(bytestring)
@@ -94,30 +96,33 @@ def readPlistFromString(bytestring):
 def get_seeding_program(sucatalog_url):
     '''Returns a seeding program name based on the sucatalog_url'''
     try:
-        seed_catalogs = readPlist(SEED_CATALOGS_PLIST)
+        seed_catalogs = read_plist(SEED_CATALOGS_PLIST)
         for key, value in seed_catalogs.items():
             if sucatalog_url == value:
                 return key
         return ''
-    except (OSError, ExpatError, AttributeError, KeyError):
+    except (OSError, IOError, ExpatError, AttributeError, KeyError) as err:
+        print(err, file=sys.stderr)
         return ''
 
 
 def get_seed_catalog(seedname='DeveloperSeed'):
     '''Returns the developer seed sucatalog'''
     try:
-        seed_catalogs = readPlist(SEED_CATALOGS_PLIST)
+        seed_catalogs = read_plist(SEED_CATALOGS_PLIST)
         return seed_catalogs.get(seedname)
-    except (OSError, ExpatError, AttributeError, KeyError):
+    except (OSError, IOError, ExpatError, AttributeError, KeyError) as err:
+        print(err, file=sys.stderr)
         return ''
 
 
 def get_seeding_programs():
     '''Returns the list of seeding program names'''
     try:
-        seed_catalogs = readPlist(SEED_CATALOGS_PLIST)
+        seed_catalogs = read_plist(SEED_CATALOGS_PLIST)
         return list(seed_catalogs.keys())
-    except (OSError, ExpatError, AttributeError, KeyError):
+    except (OSError, IOError, ExpatError, AttributeError, KeyError) as err:
+        print(err, file=sys.stderr)
         return ''
 
 
@@ -129,7 +134,7 @@ def get_default_catalog():
 
 def make_sparse_image(volume_name, output_path):
     '''Make a sparse disk image we can install a product to'''
-    cmd = ['/usr/bin/hdiutil', 'create', '-size', '9g', '-fs', 'HFS+',
+    cmd = ['/usr/bin/hdiutil', 'create', '-size', '16g', '-fs', 'HFS+',
            '-volname', volume_name, '-type', 'SPARSE', '-plist', output_path]
     try:
         output = subprocess.check_output(cmd)
@@ -137,7 +142,7 @@ def make_sparse_image(volume_name, output_path):
         print(err, file=sys.stderr)
         exit(-1)
     try:
-        return readPlistFromString(output)[0]
+        return read_plist_from_string(output)[0]
     except IndexError as err:
         print('Unexpected output from hdiutil: %s' % output, file=sys.stderr)
         exit(-1)
@@ -154,7 +159,6 @@ def make_compressed_dmg(app_path, diskimagepath):
     print('Making read-only compressed disk image containing %s...'
           % os.path.basename(app_path))
     cmd = ['/usr/bin/hdiutil', 'create', '-fs', 'HFS+',
-           '-layout', 'NONE',
            '-srcfolder', app_path, diskimagepath]
     try:
         subprocess.check_call(cmd)
@@ -181,7 +185,7 @@ def mountdmg(dmgpath):
               file=sys.stderr)
         return None
     if pliststr:
-        plist = readPlistFromString(pliststr)
+        plist = read_plist_from_string(pliststr)
         for entity in plist['system-entities']:
             if 'mount-point' in entity:
                 mountpoints.append(entity['mount-point'])
@@ -216,17 +220,28 @@ def install_product(dist_path, target_vol):
     cmd = ['/usr/sbin/installer', '-pkg', dist_path, '-target', target_vol]
     try:
         subprocess.check_call(cmd)
-        # dmg.T9ak1HApplications
-        path = target_vol + 'Applications'
-        if os.path.exists(path):
-            print('executing the ${TARGET}Applications workaround...')
-            subprocess.check_call(['/usr/bin/ditto', path, os.path.join(target_vol, 'Applications')])
-            subprocess.check_call(['/bin/rm', '-r', path])
-        return True
     except subprocess.CalledProcessError as err:
         print(err, file=sys.stderr)
         return False
-
+    else:
+        # Apple postinstall script bug ends up copying files to a path like
+        # /tmp/dmg.T9ak1HApplications
+        path = target_vol + 'Applications'
+        if os.path.exists(path):
+            print('*********************************************************')
+            print('*** Working around a very dumb Apple bug in a package ***')
+            print('*** postinstall script that fails to correctly target ***')
+            print('*** the Install macOS.app when installed to a volume  ***')
+            print('*** other than the current boot volume.               ***')
+            print('***       Please file feedback with Apple!            ***')
+            print('*********************************************************')
+            subprocess.check_call(
+                ['/usr/bin/ditto',
+                 path,
+                 os.path.join(target_vol, 'Applications')]
+            )
+            subprocess.check_call(['/bin/rm', '-r', path])
+        return True
 
 class ReplicationError(Exception):
     '''A custom error when replication fails'''
@@ -271,7 +286,7 @@ def parse_server_metadata(filename):
     title = ''
     vers = ''
     try:
-        md_plist = readPlist(filename)
+        md_plist = read_plist(filename)
     except (OSError, IOError, ExpatError) as err:
         print('Error reading %s: %s' % (filename, err), file=sys.stderr)
         return {}
@@ -300,7 +315,7 @@ def get_server_metadata(catalog, product_key, workdir, ignore_cache=False):
             print('Could not replicate %s: %s' % (url, err), file=sys.stderr)
             return None
     except KeyError:
-        print('Malformed catalog.', file=sys.stderr)
+        #print('Malformed catalog.', file=sys.stderr)
         return None
 
 
@@ -330,6 +345,10 @@ def parse_dist(filename):
     except IOError as err:
         print('Error reading %s: %s' % (filename, err), file=sys.stderr)
         return dist_info
+
+    titles = dom.getElementsByTagName('title')
+    if titles:
+        dist_info['title_from_dist'] = titles[0].firstChild.wholeText
 
     auxinfos = dom.getElementsByTagName('auxinfo')
     if not auxinfos:
@@ -386,7 +405,7 @@ def download_and_parse_sucatalog(sucatalog, workdir, ignore_cache=False):
         with gzip.open(localcatalogpath) as the_file:
             content = the_file.read()
             try:
-                catalog = readPlistFromString(content)
+                catalog = read_plist_from_string(content)
                 return catalog
             except ExpatError as err:
                 print('Error reading %s: %s' % (localcatalogpath, err),
@@ -394,7 +413,7 @@ def download_and_parse_sucatalog(sucatalog, workdir, ignore_cache=False):
                 exit(-1)
     else:
         try:
-            catalog = readPlist(localcatalogpath)
+            catalog = read_plist(localcatalogpath)
             return catalog
         except (OSError, IOError, ExpatError) as err:
             print('Error reading %s: %s' % (localcatalogpath, err),
@@ -411,8 +430,7 @@ def find_mac_os_installers(catalog):
             product = catalog['Products'][product_key]
             try:
                 if product['ExtendedMetaInfo'][
-                        'InstallAssistantPackageIdentifiers'][
-                            'OSInstall'] == 'com.apple.mpkg.OSInstall':
+                        'InstallAssistantPackageIdentifiers']:
                     mac_os_installer_products.append(product_key)
             except KeyError:
                 continue
@@ -426,7 +444,13 @@ def os_installer_product_info(catalog, workdir, ignore_cache=False):
     for product_key in installer_products:
         product_info[product_key] = {}
         filename = get_server_metadata(catalog, product_key, workdir)
-        product_info[product_key] = parse_server_metadata(filename)
+        if filename:
+            product_info[product_key] = parse_server_metadata(filename)
+        else:
+            print('No server metadata for %s' % product_key)
+            product_info[product_key]['title'] = None
+            product_info[product_key]['version'] = None
+
         product = catalog['Products'][product_key]
         product_info[product_key]['PostDate'] = product['PostDate']
         distributions = product['Distributions']
@@ -437,11 +461,16 @@ def os_installer_product_info(catalog, workdir, ignore_cache=False):
         except ReplicationError as err:
             print('Could not replicate %s: %s' % (dist_url, err),
                   file=sys.stderr)
-        dist_info = parse_dist(dist_path)
-        product_info[product_key]['DistributionPath'] = dist_path
-        product_info[product_key]['product_id'] = product_key
-        product_info[product_key].update(dist_info)
-
+        else:
+            dist_info = parse_dist(dist_path)
+            product_info[product_key]['DistributionPath'] = dist_path
+            product_info[product_key]['product_id'] = product_key
+            product_info[product_key].update(dist_info)
+            if not product_info[product_key]['title']:
+                product_info[product_key]['title'] = dist_info.get('title_from_dist')
+            if not product_info[product_key]['version']:
+                product_info[product_key]['version'] = dist_info.get('VERSION')
+        
     return product_info
 
 
@@ -483,10 +512,6 @@ def find_installer_app(mountpoint):
 
 def main():
     '''Do the main thing here'''
-    if os.getuid() != 0:
-        sys.exit('This command requires root (to install packages), so please '
-                 'run again with sudo or as root.')
-
     parser = argparse.ArgumentParser()
     parser.add_argument('--seedprogram', default='',
                         help='Which Seed Program catalog to use. Valid values '
@@ -511,6 +536,10 @@ def main():
     parser.add_argument('--ignore-cache', action='store_true',
                         help='Ignore any previously cached files.')
     args = parser.parse_args()
+
+    if os.getuid() != 0:
+        sys.exit('This command requires root (to install packages), so please '
+                 'run again with sudo or as root.')
 
     if args.catalogurl:
         su_catalog_url = args.catalogurl
@@ -541,7 +570,7 @@ def main():
         exit(-1)
 
     # display a menu of choices (some seed catalogs have multiple installers)
-    print_fmt = '%2s %12s %10s %8s %11s  %-19s %s'
+    print_fmt = '%2s %14s %10s %8s %11s  %-19s %s'
     print(print_fmt
           % ('#', 'ProductID', 'Version', 'Build', 'Post Date', 'Title', 'Boards'))
     from operator import itemgetter
@@ -551,8 +580,8 @@ def main():
         print(print_fmt % (
             index + 1,
             product_id,
-            product_info[product_id]['version'],
-            product_info[product_id]['BUILD'],
+            product_info[product_id].get('version', 'UNKNOWN'),
+            product_info[product_id].get('BUILD', 'UNKNOWN'),
             product_info[product_id]['PostDate'].strftime('%Y-%m-%d'),
             product_info[product_id]['title'],
             product_info[product_id]['boards']
@@ -564,7 +593,7 @@ def main():
         index = int(answer) - 1
         if index < 0:
             raise ValueError
-        product_id = product_ids[index]
+        product_id = list(product_info.keys())[index]
     except (ValueError, IndexError):
         print('Exiting.')
         exit(0)
@@ -595,10 +624,12 @@ def main():
             unmountdmg(mountpoint)
             exit(-1)
         # add the seeding program xattr to the app if applicable
-        seeding_program = get_seeding_program(args.catalogurl)
+        seeding_program = get_seeding_program(su_catalog_url)
         if seeding_program:
             installer_app = find_installer_app(mountpoint)
             if installer_app:
+                print("Adding seeding program %s extended attribute to app"
+                      % seeding_program)
                 xattr.setxattr(installer_app, 'SeedProgram', seeding_program)
         print('Product downloaded and installed to %s' % sparse_diskimage_path)
         if args.raw:
