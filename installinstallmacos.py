@@ -381,10 +381,10 @@ def parse_dist(filename):
     with open(filename, 'r') as f:
         lines = f.readlines()
     for line in lines:
-        r = re.search('var boardIds = (\[.+\]);', line)
+        r = re.search('var (boardIds|supportedBoardIDs) = (\[.+\]);', line)
         if r:
             import json
-            s = r.group(1).replace("'", '"')
+            s = r.group(2).replace("'", '"')
             boards = json.loads(s.replace(',]', ']'))
             break
     # assume machine specific if the number of supported boards is less than 10
