@@ -387,7 +387,7 @@ def parse_dist(filename):
     with open(filename, 'r') as f:
         lines = f.readlines()
     for line in lines:
-        r = re.search('var (boardIds|supportedBoardIDs) = (\[.+\]);', line)
+        r = re.search('var (boardIds|supportedBoardIDs|supportedDeviceIDs) = (\[.+\]);', line)
         if r:
             import json
             s = r.group(2).replace("'", '"')
