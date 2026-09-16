@@ -43,7 +43,9 @@ from xml.dom import minidom
 from xml.parsers.expat import ExpatError
 import xattr
 
-
+# <major_build_number>: <catalog-URL>
+#  e.g. 26A428 ==> '26'
+#       macOS 27 ==> 'index-27-...'
 DEFAULT_SUCATALOGS = {
     '17': 'https://swscan.apple.com/content/catalogs/others/'
           'index-10.13-10.12-10.11-10.10-10.9'
@@ -71,6 +73,9 @@ DEFAULT_SUCATALOGS = {
           '-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog',
     '25': 'https://swscan.apple.com/content/catalogs/others/'
           'index-26-15-14-13-12-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9'
+          '-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog',
+    '26': 'https://swscan.apple.com/content/catalogs/others/'
+          'index-27-26-15-14-13-12-10.16-10.15-10.14-10.13-10.12-10.11-10.10-10.9'
           '-mountainlion-lion-snowleopard-leopard.merged-1.sucatalog',
 }
 
